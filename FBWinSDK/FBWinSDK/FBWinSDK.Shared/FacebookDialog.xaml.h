@@ -30,6 +30,8 @@ namespace Facebook
         Windows::Foundation::Collections::PropertySet^ Parameters
         );
 
+    ref class FBSession;
+
 	[Windows::Foundation::Metadata::WebHostHidden]
     public ref class FacebookDialog sealed
     {
@@ -62,6 +64,8 @@ namespace Facebook
             Windows::Foundation::Collections::PropertySet^ Parameters
             );
 
+        void LogOutWebView();
+
     private:
         void ShowDialog(
             DialogUriBuilder^ uriBuilder,
@@ -91,6 +95,10 @@ namespace Facebook
             Windows::Foundation::Collections::PropertySet^ Parameters
             );
 
+        Windows::Foundation::Uri^ BuildLogoutDialogUrl(
+            FBSession^ session
+            );
+
         void dialogWebView_LoginNavStarting(
             Windows::UI::Xaml::Controls::WebView^ sender,
             Windows::UI::Xaml::Controls::WebViewNavigationStartingEventArgs^ e
@@ -102,6 +110,11 @@ namespace Facebook
             );
 
         void dialogWebView_RequestNavStarting(
+            Windows::UI::Xaml::Controls::WebView^ sender,
+            Windows::UI::Xaml::Controls::WebViewNavigationStartingEventArgs^ e
+            );
+
+        void dialogWebView_LogoutNavStarting(
             Windows::UI::Xaml::Controls::WebView^ sender,
             Windows::UI::Xaml::Controls::WebViewNavigationStartingEventArgs^ e
             );
@@ -118,7 +131,11 @@ namespace Facebook
         bool IsDialogCloseRedirect(
             Windows::Foundation::Uri^ Response
             );
-        
+
+        bool IsHomePageRedirect(
+            Windows::Foundation::Uri^ Response
+            );
+
         void OnSizeChanged(
             Windows::UI::Core::CoreWindow ^sender,
             Windows::UI::Core::WindowSizeChangedEventArgs ^args

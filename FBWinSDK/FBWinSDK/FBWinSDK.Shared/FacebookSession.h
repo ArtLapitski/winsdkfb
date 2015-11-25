@@ -107,6 +107,10 @@ namespace Facebook
             //! Clear all login information, e.g. user info, token string, etc.
             Windows::Foundation::IAsyncAction^ LogoutAsync();
 
+            //! Logout from Facebook server and clear all login information, e.g. 
+            //! user info, token string, etc.
+            Windows::Foundation::IAsyncOperation<FBResult^>^ LogoutWebAsync();
+
             //! User info - valid after successful login
             property Facebook::Graph::FBUser^ User
             {
@@ -170,6 +174,9 @@ namespace Facebook
                 );
 
             Windows::Foundation::IAsyncAction^ TryDeleteTokenData(
+                );
+
+            Windows::Foundation::IAsyncOperation<FBResult^>^ TryLogoutWebView(
                 );
 
             concurrency::task<FBResult^> GetAppPermissions(

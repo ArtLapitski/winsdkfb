@@ -141,6 +141,64 @@ FBUser^ FBSession::User::get()
     return _user;
 }
 
+IAsyncOperation<FBResult^>^ FBSession::TryLogoutWebView(
+    )
+{
+    _dialog = ref new FacebookDialog();
+
+    _showingDialog = TRUE;
+    auto callback = ref new DispatchedHandler(
+        [=]()
+    {
+        try
+        {
+            _dialog->LogOutWebView();
+        }
+        catch (Exception^ ex)
+        {
+            _showingDialog = FALSE;
+#ifdef _DEBUG
+            OutputDebugString(L"LogOutWebView has failed");
+#endif
+        }
+    });
+
+    Windows::UI::Core::CoreWindow^ wnd = CoreApplication::MainView->CoreWindow;
+
+    IAsyncAction^ waiter = wnd->Dispatcher->RunAsync(
+        Windows::UI::Core::CoreDispatcherPriority::Normal,
+        callback);
+
+    // create a task that will wait for the login control to finish doing what it was doing
+    IAsyncOperation<FBResult^>^ task = concurrency::create_async(
+        [=]()
+    {
+        FBResult^ dialogResponse = nullptr;
+
+        // TODO: Is there a better way to do this?  I was using an event, but
+        // the concurrency event object was deprecated in the Win10 SDK tools.
+        // Switched to plain old Windows event, but that didn't work at all,
+        // so polling for now.
+        while (_showingDialog && !dialogResponse)
+        {
+            dialogResponse = _dialog->GetDialogResponse();
+            Sleep(0);
+        }
+
+        if (!_showingDialog)
+        {
+            FBError^ err = FBError::FromJson(ref new String(ErrorObjectJson));
+            dialogResponse = ref new FBResult(err);
+        }
+
+        _showingDialog = FALSE;
+        _dialog = nullptr;
+        return dialogResponse;
+    });
+
+    return task;
+}
+
 IAsyncAction^ FBSession::LogoutAsync()
 {
     _user = nullptr;
@@ -151,6 +209,20 @@ IAsyncAction^ FBSession::LogoutAsync()
     _loggedIn = false;
 
     return TryDeleteTokenData();
+}
+
+IAsyncOperation<FBResult^>^ FBSession::LogoutWebAsync()
+{
+    return create_async([=]()
+    {
+        return create_task(TryLogoutWebView()).then([this](FBResult ^result)
+        {
+            return create_task(LogoutAsync()).then([result]()
+            {
+                return result;
+            });
+        });
+    });
 }
 
 task<FBResult^> FBSession::GetUserInfo(

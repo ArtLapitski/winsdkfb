@@ -55,6 +55,7 @@ using namespace std;
 #define FACEBOOK_MOBILE_SERVER_NAME  L"m"
 #define FACEBOOK_LOGIN_SUCCESS_PATH  L"/connect/login_success.html"
 #define FACEBOOK_DIALOG_CLOSE_PATH   L"/dialog/close"
+#define FACEBOOK_DIALOG_HOME_PATH    L"/"
 
 const wchar_t* ErrorObjectJson = L"{\"error\": {\"message\": " \
 L"\"Operation Canceled\", \"type\": " \
@@ -188,6 +189,40 @@ void FacebookDialog::ShowRequestsDialog(
             this, &FacebookDialog::dialogWebView_RequestNavStarting);
     ShowDialog(ref new DialogUriBuilder(this,
         &FacebookDialog::BuildRequestsDialogUrl), handler, Parameters);
+}
+
+void FacebookDialog::LogOutWebView()
+{
+    if (_popup->IsOpen)
+    {
+        _popup->IsOpen = false;
+        _popup->Child = nullptr;
+
+        dialogWebBrowser->Stop();
+    }
+
+    _dialogResponse = nullptr;
+
+    FBSession^ session = FBSession::ActiveSession;
+
+    if (session->LoggedIn)
+    {
+        TypedEventHandler<WebView^, WebViewNavigationStartingEventArgs^>^ navigationStartedHandler =
+            ref new TypedEventHandler<WebView^, WebViewNavigationStartingEventArgs^>(
+                this, &FacebookDialog::dialogWebView_LogoutNavStarting);
+        navigatingEventHandlerRegistrationToken = dialogWebBrowser->NavigationStarting +=
+            navigationStartedHandler;
+
+        dialogWebBrowser->Navigate(BuildLogoutDialogUrl(session));
+    }
+    else
+    {
+        FBError^ err = ref new FBError(0,
+            L"Not logged in",
+            L"You aren't logged in");
+
+        _dialogResponse = ref new FBResult(err);
+    }
 }
 
 String^ FacebookDialog::GetRedirectUriString(
@@ -354,6 +389,15 @@ Uri^ FacebookDialog::BuildRequestsDialogUrl(
     return ref new Uri(dialogUriString);
 }
 
+Uri^ FacebookDialog::BuildLogoutDialogUrl(
+    FBSession^ session
+    )
+{
+    String^ uriString = L"https://www.facebook.com/logout.php?access_token=" + session->AccessTokenData->AccessToken + L"&next=" + GetRedirectUriString(L"logout");
+
+    return ref new Uri(uriString);
+}
+
 bool FacebookDialog::IsLoginSuccessRedirect(
     Uri^ Response
     )
@@ -366,6 +410,13 @@ bool FacebookDialog::IsDialogCloseRedirect(
     )
 {
     return (String::CompareOrdinal(Response->Path, FACEBOOK_DIALOG_CLOSE_PATH) == 0);
+}
+
+bool FacebookDialog::IsHomePageRedirect(
+    Uri^ Response
+    )
+{
+    return (String::CompareOrdinal(Response->Path, FACEBOOK_DIALOG_HOME_PATH) == 0);
 }
 
 void FacebookDialog::dialogWebView_LoginNavStarting(
@@ -474,6 +525,45 @@ void FacebookDialog::dialogWebView_RequestNavStarting(
         dialogWebBrowser->Stop();
 
         UninitDialog();
+
+        FBError^ err = FBError::FromJson(ref new String(ErrorObjectJson));
+        _dialogResponse = ref new FBResult(err);
+    }
+}
+
+void FacebookDialog::dialogWebView_LogoutNavStarting(
+    WebView^ sender,
+    WebViewNavigationStartingEventArgs^ e
+    )
+{
+    DebugPrintLine(L"Navigating to " + e->Uri->DisplayUri);
+    DebugPrintLine(L"Path is " + e->Uri->Path);
+
+    static const auto uninit = [this]()
+    {
+        dialogWebBrowser->Stop();
+        UninitDialog();
+    };
+
+    if (IsLoginSuccessRedirect(e->Uri))
+    {
+        uninit();
+        DebugPrintLine(L"Request response is " + e->Uri->DisplayUri);
+
+        _dialogResponse = ref new FBResult(ref new Platform::String(L"Logout operation has succeeded"));
+    }
+    else if (IsHomePageRedirect(e->Uri))
+    {
+        uninit();
+
+        FBError^ err = ref new FBError(0,
+            L"Logout operation error",
+            L"Logout call has been refused by server");
+        _dialogResponse = ref new FBResult(err);
+    }
+    else if (IsDialogCloseRedirect(e->Uri))
+    {
+        uninit();
 
         FBError^ err = FBError::FromJson(ref new String(ErrorObjectJson));
         _dialogResponse = ref new FBResult(err);
